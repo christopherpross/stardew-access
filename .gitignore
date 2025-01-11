@@ -4,7 +4,10 @@
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
 stardew-access/assets/custom-tiles.json
+stardew-access/compiled-docs/
+act_out/
 *.patch
+.idea/
 
 .vscode/*
 .git-old/

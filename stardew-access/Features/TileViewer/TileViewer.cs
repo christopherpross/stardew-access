@@ -23,6 +23,10 @@ internal class TileViewer : FeatureBase
     private Vector2 _prevPlayerPosition = Vector2.Zero, _prevFacing = Vector2.Zero;
     private Vector2 _finalTile = Vector2.Zero;
     private Vector2 _prevTile = Vector2.Zero;
+    private bool _upKeyFlag = true;
+    private bool _rightKeyFlag = true;
+    private bool _downKeyFlag = true;
+    private bool _leftKeyFlag = true;
 
     public Boolean IsAutoWalking = false;
 
@@ -68,9 +72,9 @@ internal class TileViewer : FeatureBase
     /// <returns>Vector2</returns>
     public Vector2 GetTileCursorPosition()
     {
-        if (IsCarpenterMenuBuilderViewport())
-        {    
-            return CarpenterMenuPatch.MousePosition!.Value;
+        if (IsInMenuBuilderViewport())
+        {
+            return MouseOverrideForTileViewer.MousePosition!.Value;
         }
         Vector2 target = PlayerPosition;
         if (_relativeOffsetLock)
@@ -94,14 +98,13 @@ internal class TileViewer : FeatureBase
         return new Vector2((int)(position.X / Game1.tileSize), (int)(position.Y / Game1.tileSize));
     }
 
-    private static bool IsCarpenterMenuBuilderViewport()
+    internal static bool IsInMenuBuilderViewport() => Game1.activeClickableMenu switch
     {
-        if (Game1.activeClickableMenu is CarpenterMenu menu)
-        {
-            return menu.onFarm;
-        }
-        return false;
-    }
+        CarpenterMenu => CarpenterMenuPatch.isOnFarm,
+        PurchaseAnimalsMenu => PurchaseAnimalsMenuPatch.isOnFarm && !PurchaseAnimalsMenuPatch.isNamingAnimal,
+        AnimalQueryMenu => AnimalQueryMenuPatch.isOnFarm,
+        _ => false
+    };
 
     /// <summary>
     /// Handle keyboard input related to the tile viewer.
@@ -109,7 +112,7 @@ internal class TileViewer : FeatureBase
     public override bool OnButtonPressed(object? sender, ButtonPressedEventArgs e)
     {
         // Exit if in a menu
-        if (!IsCarpenterMenuBuilderViewport() && Game1.activeClickableMenu != null)
+        if (!IsInMenuBuilderViewport() && Game1.activeClickableMenu != null)
         {
             return false;
         }
@@ -147,22 +150,6 @@ internal class TileViewer : FeatureBase
         {
             CursorMoveInput(new Vector2(-MainClass.Config.TileCursorPreciseMovementDistance, 0), true);
         }
-        else if (MainClass.Config.TileCursorUpKey.JustPressed())
-        {
-            CursorMoveInput(new Vector2(0, -Game1.tileSize));
-        }
-        else if (MainClass.Config.TileCursorRightKey.JustPressed())
-        {
-            CursorMoveInput(new Vector2(Game1.tileSize, 0));
-        }
-        else if (MainClass.Config.TileCursorDownKey.JustPressed())
-        {
-            CursorMoveInput(new Vector2(0, Game1.tileSize));
-        }
-        else if (MainClass.Config.TileCursorLeftKey.JustPressed())
-        {
-            CursorMoveInput(new Vector2(-Game1.tileSize, 0));
-        }
         else if (MainClass.Config.AutoWalkToTileKey.JustPressed() && Context.IsPlayerFree)
         {
             StartAutoWalking();
@@ -175,37 +162,37 @@ internal class TileViewer : FeatureBase
         // Suppresses button presses (excluding certain buttons) if tile viewer is path finding
         if (Game1.player.controller is null) return false;
         if (!Instance.IsAutoWalking) return false;
-        
+
         if (MainClass.Config.OTCancelAutoWalking.JustPressed())
         {
-            #if DEBUG
+#if DEBUG
             Log.Verbose(
                 "OnButtonPressed: cancel auto walking button pressed, canceling auto walking for tile viewer.");
-            #endif
+#endif
             StopAutoWalking(wasForced: true);
             MainClass.ModHelper!.Input.Suppress(e.Button);
         }
         else if (InputUtils.IsAnyMovementKey(e.Button))
         {
-            #if DEBUG
+#if DEBUG
             Log.Verbose("OnButtonPressed: movement key pressed, canceling auto walking for tile viewer.");
-            #endif
+#endif
             StopAutoWalking(wasForced: true);
         }
         else if (SButtonExtensions.IsUseToolButton(e.Button))
         {
-            #if DEBUG
+#if DEBUG
             Log.Verbose(
                 "OnButtonPressed: use tool button pressed, canceling auto walking for tile viewer.");
-            #endif
+#endif
             StopAutoWalking(wasForced: true);
             Game1.pressUseToolButton();
         }
         else if (SButtonExtensions.IsActionButton(e.Button))
         {
-            #if DEBUG
+#if DEBUG
             Log.Verbose("OnButtonPressed: action button pressed, canceling auto walking for tile viewer.");
-            #endif
+#endif
             StopAutoWalking(wasForced: true);
             Game1.pressActionButton(Game1.input.GetKeyboardState(), Game1.input.GetMouseState(),
                 Game1.input.GetGamePadState());
@@ -215,10 +202,10 @@ internal class TileViewer : FeatureBase
             && !InputUtils.IsToolbarSwapButton(e.Button)
             && !e.Button.Equals(SButton.LeftControl))
         {
-            #if DEBUG
+#if DEBUG
             Log.Verbose(
                 $"OnButtonPressed: suppressing '{e.Button}' for object tracker/tile viewer auto walking as it is neither any inventory slot button nor the toolbar swap button");
-            #endif
+#endif
             MainClass.ModHelper!.Input.Suppress(e.Button);
         }
 
@@ -288,22 +275,56 @@ internal class TileViewer : FeatureBase
 
     private void CursorMoveInput(Vector2 delta, Boolean precise = false)
     {
-        bool isCarpenterMenu = IsCarpenterMenuBuilderViewport();
-        if (isCarpenterMenu)
+        bool isInMenuBuilderViewport = IsInMenuBuilderViewport();
+        if (isInMenuBuilderViewport)
         {
             int deltaX = (int)delta.X, deltaY = (int)delta.Y;
             int currentX = Game1.getMouseX(ui_scale: false), currentY = Game1.getMouseY(ui_scale: false);
-            Vector2 newPosition = new Vector2(currentX, currentY) + delta;
-            int newX = (int)newPosition.X, newY = (int)newPosition.Y;
-            if (CarpenterMenuPatch.carpenterMenu != null)
+            int newX = currentX + deltaX, newY = currentY + deltaY;
+            int beforeViewportX = Game1.viewport.X, beforeViewportY = Game1.viewport.Y;
+
+            // Pan the screen if at edge
+            if (newX < 32)
             {
-                CarpenterMenuPatch.MousePosition = newPosition;
+                Game1.panScreen(-64, 0);
+                int diffVewportX = Math.Abs(Game1.viewport.X - beforeViewportX);
+                newX = diffVewportX != 64 && diffVewportX != 0
+                          ? newX - deltaX - 64 - diffVewportX
+                          : newX - deltaX;
             }
+            else if (newX - Game1.viewport.Width >= -32)
+            {
+                Game1.panScreen(64, 0);
+                int diffVewportX = Math.Abs(Game1.viewport.X - beforeViewportX);
+                newX = diffVewportX != 64 && diffVewportX != 0
+                          ? newX - deltaX + 64 - diffVewportX
+                          : newX - deltaX;
+            }
+            if (newY < 32)
+            {
+                Game1.panScreen(0, -64);
+                int diffVewportY = Math.Abs(Game1.viewport.Y - beforeViewportY);
+                newY = diffVewportY != 64 && diffVewportY != 0
+                          ? newY - deltaY - 64 - diffVewportY
+                          : newY - deltaY;
+            }
+            else if (newY - Game1.viewport.Height >= -32)
+            {
+                Game1.panScreen(0, 64);
+                int diffVewportY = Math.Abs(Game1.viewport.Y - beforeViewportY);
+                newY = diffVewportY != 64 && diffVewportY != 0
+                          ? newY - deltaY + 64 - diffVewportY
+                          : newY - deltaY;
+            }
+
+            MouseOverrideForTileViewer.MousePosition = new(newX, newY);
         }
         else if (!TryMoveTileView(delta)) return;
-        Vector2 position = !isCarpenterMenu ? GetTileCursorPosition() : CarpenterMenuPatch.MousePosition!.Value + new Vector2(Game1.viewport.X, Game1.viewport.Y);
-        string name = TileInfo.GetNameAtTileWithBlockedOrEmptyIndication(!isCarpenterMenu ? GetViewingTile() : position/64);
-        
+        Vector2 position = isInMenuBuilderViewport
+            ? MouseOverrideForTileViewer.MousePosition!.Value + new Vector2(Game1.viewport.X, Game1.viewport.Y)
+            : GetTileCursorPosition();
+        string name = TileInfo.GetNameAtTileWithBlockedOrEmptyIndication(!isInMenuBuilderViewport ? GetViewingTile() : position / 64);
+
         MainClass.ScreenReader.Say(precise
             ? $"{name}, {position.X}, {position.Y}"
             : $"{name}, {(int)(position.X / Game1.tileSize)}, {(int)(position.Y / Game1.tileSize)}", true);
@@ -344,6 +365,36 @@ internal class TileViewer : FeatureBase
     /// </summary>
     public override void Update(object? sender, UpdateTickedEventArgs e)
     {
+        if ((Game1.activeClickableMenu == null && Context.IsPlayerFree) || IsInMenuBuilderViewport())
+        {
+            if (MainClass.Config.TileCursorUpKey.IsDown() && _upKeyFlag)
+            {
+                CursorMoveInput(new Vector2(0, -64));
+                _upKeyFlag = false;
+                Task.Delay(200).ContinueWith(_ => { _upKeyFlag = true; });
+            }
+            else if (MainClass.Config.TileCursorRightKey.IsDown() && _rightKeyFlag)
+            {
+                CursorMoveInput(new Vector2(64, 0));
+                _rightKeyFlag = false;
+                Task.Delay(200).ContinueWith(_ => { _rightKeyFlag = true; });
+            }
+            else if (MainClass.Config.TileCursorDownKey.IsDown() && _downKeyFlag)
+            {
+                CursorMoveInput(new Vector2(0, 64));
+                _downKeyFlag = false;
+                Task.Delay(200).ContinueWith(_ => { _downKeyFlag = true; });
+            }
+            else if (MainClass.Config.TileCursorLeftKey.IsDown() && _leftKeyFlag)
+            {
+                CursorMoveInput(new Vector2(-64, 0));
+                _leftKeyFlag = false;
+                Task.Delay(200).ContinueWith(_ => { _leftKeyFlag = true; });
+            }
+        }
+
+        if (!Context.IsPlayerFree) return;
+
         //Reset the viewing cursor to the player when they turn or move. This will not reset the locked offset relative cursor position.
         if (_prevFacing != PlayerFacingVector || _prevPlayerPosition != PlayerPosition)
         {
@@ -360,7 +411,7 @@ internal class TileViewer : FeatureBase
             StopAutoWalking();
             return;
         }
-        
+
         if (Vector2.Distance(_prevTile, CurrentPlayer.Position) >= 2f)
         {
             _prevTile = CurrentPlayer.Position;
@@ -377,7 +428,7 @@ internal class TileViewer : FeatureBase
     private static bool AllowMouseSnap(Vector2 point)
     {
         // Prevent snapping if any menu is open or if window loses focus
-        if (!Game1.game1.HasKeyboardFocus() && Game1.activeClickableMenu != null && !IsCarpenterMenuBuilderViewport()) return false;
+        if (!Game1.game1.HasKeyboardFocus() && Game1.activeClickableMenu != null && !IsInMenuBuilderViewport()) return false;
 
         // Utility.isOnScreen treats a vector as a pixel position, not a tile position
         if (!Utility.isOnScreen(point, 0)) return false;

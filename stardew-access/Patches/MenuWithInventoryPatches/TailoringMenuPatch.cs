@@ -1,6 +1,5 @@
 using HarmonyLib;
 using Microsoft.Xna.Framework.Graphics;
-using stardew_access.Translation;
 using stardew_access.Utils;
 using StardewValley;
 using StardewValley.Menus;
@@ -12,7 +11,7 @@ namespace stardew_access.Patches
         public void Apply(Harmony harmony)
         {
             harmony.Patch(
-                original: AccessTools.Method(typeof(TailoringMenu), nameof(TailoringMenu.draw), new Type[] { typeof(SpriteBatch) }),
+                original: AccessTools.Method(typeof(TailoringMenu), nameof(TailoringMenu.draw), [typeof(SpriteBatch)]),
                 postfix: new HarmonyMethod(typeof(TailoringMenuPatch), nameof(TailoringMenuPatch.DrawPatch))
             );
         }

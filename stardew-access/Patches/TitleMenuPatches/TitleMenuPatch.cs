@@ -9,11 +9,16 @@ namespace stardew_access.Patches;
 internal class TitleMenuPatch : IPatch
 {
     private static bool HasSpokenSkipMessage = false;
+    private static bool shouldSnapToDefault = false;
     public void Apply(Harmony harmony)
     {
         harmony.Patch(
-                original: AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.draw), new Type[] { typeof(SpriteBatch) }),
+                original: AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.draw), [typeof(SpriteBatch)]),
                 postfix: new HarmonyMethod(typeof(TitleMenuPatch), nameof(TitleMenuPatch.DrawPatch))
+        );
+        harmony.Patch(
+                original: AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.ReturnToMainTitleScreen)),
+                postfix: new HarmonyMethod(typeof(TitleMenuPatch), nameof(TitleMenuPatch.ReturnToMainTitleScreenPatch))
         );
     }
 
@@ -23,6 +28,13 @@ internal class TitleMenuPatch : IPatch
         {
             if (___isTransitioningButtons)
                 return;
+
+            if (shouldSnapToDefault)
+            {
+                __instance.populateClickableComponentList();
+                __instance.snapToDefaultClickableComponent();
+                shouldSnapToDefault = false;
+            }
 
             int x = Game1.getMouseX(true), y = Game1.getMouseY(true); // Mouse x and y position
             string translationKey = "";
@@ -84,6 +96,8 @@ internal class TitleMenuPatch : IPatch
 
             if (!string.IsNullOrEmpty(translationKey))
                 MainClass.ScreenReader.TranslateAndSayWithMenuChecker(translationKey, true, translationTokens);
+
+            IClickableMenuPatch.DrawPatch();
         }
         catch (Exception e)
         {
@@ -100,4 +114,11 @@ internal class TitleMenuPatch : IPatch
         "invite" => "menu-title-invite_button",
         _ => ""
     };
+
+    private static void ReturnToMainTitleScreenPatch()
+    {
+        shouldSnapToDefault = true;
+        Game1.options.setGamepadMode("force_on");
+        Game1.options.snappyMenus = true;
+    }
 }

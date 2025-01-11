@@ -69,6 +69,16 @@ internal class ModConfig
     public Boolean ReadFlooring { get; set; } = false;
 
     /// <summary>
+    /// Toggles reading floorings, an alternate/companion to `flooring` command;
+    /// </summary>
+    public KeybindList ReadFlooringKey { get; set; } = KeybindList.Parse("");
+
+    /// <summary>
+    /// Toggle reading descriptive names for flooring or generice ones (pathway/flooring/stepping stone).
+    /// </summary>
+    public Boolean DisableDescriptiveFlooring { get; set; } = false;
+
+    /// <summary>
     /// Toggle speaking watered or unwatered for crops.
     /// </summary>
     public Boolean WateredToggle { get; set; } = true;
@@ -443,6 +453,31 @@ internal class ModConfig
     public Boolean TTS { get; set; } = true;
 
     /// <summary>
+    /// Toggles speaking of character speech bubbles.
+    /// </summary>
+    public Boolean AutoReadCharacterBubbles { get; set; } = true;
+
+    /// <summary>
+    /// Toggles speaking of character dialog.
+    /// </summary>
+    public Boolean AutoReadCharacterDialog { get; set; } = true;
+
+    /// <summary>
+    /// Toggles speaking of question dialog.
+    /// </summary>
+    public Boolean AutoReadQuestionDialog { get; set; } = true;
+
+    /// <summary>
+    /// Toggles speaking of basic dialogs (like no mail in mailbox).
+    /// </summary>
+    public Boolean AutoReadBasicDialog { get; set; } = true;
+
+    /// <summary>
+    /// Key to manually read current dialog.
+    /// </summary>
+    public KeybindList ManualReadDialogKey { get; set; } = KeybindList.Parse("R");
+
+    /// <summary>
     /// Toggles detecting the dropped items.
     /// </summary>
     public Boolean TrackDroppedItems { get; set; } = true;
@@ -510,6 +545,17 @@ internal class ModConfig
     /// if true, the <see cref="stardew_access.Utils.CurrentPlayer.TimeOfDay"/> will return the time in the 24-hourformat.
     /// </summary>
     public bool Use24HourFormat { get; set; } = false;
+
+    private float _EggHuntTimerMultiplier = 1f;
+
+    /// <summary>
+    /// Multiplier on default timer length for the Egg Hunt
+    /// </summary>
+    public float EggHuntTimerMultiplier
+    {
+        get { return Math.Clamp(_EggHuntTimerMultiplier, 1f, 3f); }
+        set { _EggHuntTimerMultiplier = Math.Clamp(value, 1f, 3f); }
+    }
 
     // TODO Add the exclusion and focus list too
     // public String ExclusionList { get; set; } = "test";

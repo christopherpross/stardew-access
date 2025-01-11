@@ -1,5 +1,6 @@
 using stardew_access.Translation;
 using StardewValley;
+using StardewValley.ItemTypeDefinitions;
 using StardewValley.TerrainFeatures;
 using System.Text;
 
@@ -90,7 +91,7 @@ public static class TerrainUtils
     {
         var treeStage = tree.growthStage.Value;
         var treeType = tree.treeType.Value;
-        string seedName = ItemRegistry.GetDataOrErrorItem(tree.GetData().SeedItemId).DisplayName;
+        string seedName = ItemRegistry.GetDataOrErrorItem(tree.GetData()?.SeedItemId ?? "ERROR").DisplayName ?? "ERROR";
         return (treeType, treeStage, seedName, tree.fertilized.Value, tree.stump.Value, tree.hasMoss.Value);
     }
 
@@ -145,7 +146,16 @@ public static class TerrainUtils
 
     public static string GetFlooringInfoString(Flooring flooring)
     {
-        // TODO Needs to be checked
+        if (!MainClass.Config.DisableDescriptiveFlooring)
+        {
+            ParsedItemData floorData = ItemRegistry.GetDataOrErrorItem(flooring.GetData().ItemId);
+            if (floorData != null && !floorData.IsErrorItem)
+            {
+                return floorData.DisplayName;
+            }
+        }
+
+        // Will run if DisableDescriptiveFlooring is on or when it's off but the above code wasn't able to get the floor data
         bool isPathway = flooring.whichFloor.Value is Flooring.gravel or Flooring.cobblestone or Flooring.wood or Flooring.ghost;
         bool isSteppingStone = flooring.whichFloor.Value == Flooring.steppingStone;
         string description = isPathway ? "tile_name-pathway" : (isSteppingStone ? "tile_name-stepping_stone" : "tile_name-flooring");
@@ -223,14 +233,17 @@ public static class TerrainUtils
             case LargeTerrainFeature largeTerrainFeature:
                 return GetTerrainFeatureInfoAndCategory(largeTerrainFeature, ignoreIfEmpty);
             case HoeDirt dirt:
-                CATEGORY cropCategory = CATEGORY.Crops;
-                if (dirt.crop != null && dirt.readyForHarvest())
+                // all dirt/crop tiles default to pending
+                CATEGORY cropCategory = CATEGORY.Pending;
+                // if dirt is ready for harvest, move to ready (implicit crop presence check)
+                if (dirt.readyForHarvest())
                 {
                     cropCategory = CATEGORY.Ready;
                 }
-                else if (dirt.state.Value != HoeDirt.watered)
-                { 
-                    cropCategory = CATEGORY.Pending;
+                // if there is a watered crop that is not ready for harvest, move it to crops
+                else if (dirt.isWatered() && dirt.crop != null && !dirt.readyForHarvest())
+                {
+                    cropCategory = CATEGORY.Crops;
                 }
                 return (GetDirtInfoString(dirt, ignoreIfEmpty), cropCategory);
             case CosmeticPlant cosmeticPlant:

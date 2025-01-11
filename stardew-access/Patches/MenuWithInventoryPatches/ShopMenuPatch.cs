@@ -85,7 +85,7 @@ internal class ShopMenuPatch : IPatch
     {
         if (__instance.hoveredItem == null) return;
 
-        string name = __instance.hoveredItem.DisplayName;
+        string name = InventoryUtils.GetNameOfItem(__instance.hoveredItem.DisplayName, __instance.hoveredItem.QualifiedItemId);
         string price = __instance.hoverPrice <= 0 ? ""
             : Translator.Instance.Translate("menu-shop-buy_price_info", new { price = __instance.hoverPrice }, TranslationCategory.Menu);
         string description = __instance.hoveredItem.IsRecipe
@@ -125,6 +125,6 @@ internal class ShopMenuPatch : IPatch
         string toSpeak = string.Join(", ",
             new string[] { name, requirements, price, description, healthAndStamina, buffs, ingredients }.Where(c => !string.IsNullOrEmpty(c)));
 
-        MainClass.ScreenReader.SayWithMenuChecker(toSpeak, true);
+        MainClass.ScreenReader.SayWithMenuChecker(toSpeak, true, customQuery: $"{__instance.currentItemIndex}:{__instance.currentlySnappedComponent.myID}:{toSpeak}");
     }
 }

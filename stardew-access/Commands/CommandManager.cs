@@ -22,6 +22,7 @@ public class CommandManager
         // Other Commands
         {"refsr", "Refresh screen reader"},
         {"refmc", "Refresh mod config"},
+        {"refut", "Refresh user tiles"},
         {"hnspercent", "Toggle between speaking in percentage or full health and stamina."},
         {"snapmouse", "Toggle snap mouse feature."},
         {"warning", "Toggle warnings feature."},
@@ -53,12 +54,12 @@ public class CommandManager
     public static void RegisterAll(IModHelper modHelper)
     {
         Type[] CommandsGroups =
-        {
+        [
             typeof(ReadTileCommands),
             typeof(TileMarkingCommands),
             typeof(OtherCommands),
             typeof(RadarCommands),
-        };
+        ];
 
         foreach (var commandsGroup in CommandsGroups)
         {

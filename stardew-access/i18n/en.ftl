@@ -1,4 +1,4 @@
-# Features
+# Featuresen.
 
 ## Object Tracker
 
@@ -119,6 +119,7 @@ tile-water-name = Water
 tile-cooled_lava-name = Cooled Lava
 tile-lava-name = Lava
 tile-fertile_weed_name = Fertile weed
+tile-seed_spot_name = Seed Spot
 tile-grass-name = {$grass_type ->
     *[1] Grass
     [2] Cave grass
@@ -200,10 +201,7 @@ tile-pet_bowl-prefix = {$is_in_use ->
       *[1] Empty
     }
   } {$name}
-dynamic_tile-mastery_cave-pedestal = {$has_hat ->
-    [0] Empty Pedestal
-    *[1] Pedestal with a Hat
-  }
+
 
 ## Interactable Tiles
 
@@ -241,9 +239,14 @@ tile-busy-prefix = Busy {$content}
 tile_name-stepping_stone = Stepping stone
 tile_name-pathway = Pathway
 tile_name-flooring = Flooring
-tile-volcano_dungeon-pressure_pad = Pressure Pad
+tile-volcano_dungeon-pressure_pad = Pressure Pad {$active ->
+    [0] {EMPTYSTRING()}
+    *[1] Active
+  }
 tile-volcano_dungeon-gate = Gate
 tile-forest-giant_tree_sump = Giant Tree Stump
+tile-town-bookseller = Bookseller
+tile-town-krobus_hiding_bush = Strange Bush
 
 ## Entrances
 
@@ -321,7 +324,6 @@ building-golden_parrot = Golden Parrot
 
 # NPCs
 
-npc_name-old_mariner = Old Mariner
 npc_name-island_trader = Island Trader
 npc_name-emerald_gem_bird = Emerald Gem Bird
 npc_name-aquamarine_gem_bird = Aquamarine Gem Bird
@@ -329,9 +331,27 @@ npc_name-ruby_gem_bird = Ruby Gem Bird
 npc_name-amethyst_gem_bird = Amethyst Gem Bird
 npc_name-topaz_gem_bird = Topaz Gem Bird
 npc_name-gem_bird_common = Gem Bird
-npc-farm_animal_info = {$name}, {$type}, {$age} {$age ->
-    [1] month
-    *[other] months
+npc-farm_animal_info = {$has_produce ->
+    [1] Harvestable
+    *[other] {EMPTYSTRING()}
+  } {$can_be_pet ->
+    [1] Pettable
+    *[other] {EMPTYSTRING()}
+  } {$name}, {$is_hungry ->
+    [1] Hungry
+    *[other] {EMPTYSTRING()}
+  } {$is_baby ->
+    [1] Baby
+    *[other] {EMPTYSTRING()}
+  } {$type}, {$is_age_in_days ->
+    [1] {$age ->
+      [1] 1 day
+      *[other] {$age} days
+    }
+    *[other] {$age ->
+      [1] 1 month
+      *[other] {$age} months
+    }
   }
 npc_name-horse_with_no_name = A horse with no name
 monster_name-armored = Armored {$monster_name}
@@ -348,23 +368,6 @@ monster_name-mage = {$monster_name} Mage
 monster_name-mutant = Mutant {$monster_name}
 monster_name-slime = Slime
 monster_name-truffle_crab = Truffle Crab
-
-# Event Tiles
-
-event_tile-egg_festival_shop-name = Egg Festival Shop
-event_tile-flower_dance_shop-name = Flower Dance Shop
-event_tile-soup_pot-name = Soup Pot
-event_tile-spirits_eve_shop-name = Spirit's Eve Shop
-event_tile-stardew_valley_fair_shop-name = Stardew Valley Fair Shop
-event_tile-slingshot_game-name = Slingshot Game
-event_tile-purchase_star_tokens-name = Purchase Star Tokens
-event_tile-the_wheel-name = The Wheel
-event_tile-fishing_challenge-name = Fishing Challenge
-event_tile-fortune_teller-name = Fortune Teller
-event_tile-grange_display-name = Grange Display
-event_tile-strength_game-name = Strength Game
-event_tile-free_burgers-name = Free Burgers
-event_tile-feast_of_the_winter_star_shop-name = Feast of the Winter Star Shop
 
 patch-trash_bear-wanted_item = {$trash_bear_name} wants {$item_name}!
 
@@ -474,6 +477,31 @@ direction-south_east = Southeast
 direction-current_tile = Current tile
 
 inventory_util-empty_slot = Empty Slot
+inventory_util-locked_slot = Locked Slot
+
+# Primarily used to distinguish items with same name, like Jungle Decals or Ceiling Leaves purchased in Luau
+inventory_util-special_items-name = {$item_id ->
+    [F_2627] Jungle Decal (luau) 1
+    [F_2628] Jungle Decal (luau) 2
+    [F_2629] Jungle Decal (luau) 3
+    [F_2630] Jungle Decal (luau) 4
+    [F_1817] Ceiling Leaves (luau) 1
+    [F_1818] Ceiling Leaves (luau) 2
+    [F_1819] Ceiling Leaves (luau) 3
+    [F_1820] Ceiling Leaves (flower dance) 1
+    [F_1821] Ceiling Leaves (flower fance) 2
+    [BC_192] Seasonal Plant (flower dance) 1
+    [BC_204] Seasonal Plant (flower dance) 2
+    [BC_184] Seasonal Plant (egg) 1
+    [BC_188] Seasonal Plant (egg) 2
+    [F_1687] Cloud Decal (moonlight) 1
+    [F_1692] Cloud Decal (moonlight) 2
+    [F_2635] Log Panel (winter star) 1
+    [F_2636] Log Panel (winter star) 2
+    *[other] -9999
+  }
+
+inventory_util-enchantments-galaxy_soul = Galaxy Soul ({$progress_in_percentage}% transformed)
 
 common-unknown = Unknown
 

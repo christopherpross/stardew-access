@@ -11,6 +11,7 @@ internal class PurchaseAnimalsMenuPatch : IPatch
 {
     internal static FarmAnimal? animalBeingPurchased = null;
     internal static bool isOnFarm = false;
+    internal static bool isNamingAnimal = false;
     internal static PurchaseAnimalsMenu? purchaseAnimalsMenu;
     
     private static bool firstTimeInNamingMenu = true;
@@ -32,15 +33,18 @@ internal class PurchaseAnimalsMenuPatch : IPatch
             int x = Game1.getMouseX(true), y = Game1.getMouseY(true); // Mouse x and y position
             purchaseAnimalsMenu = __instance;
             isOnFarm = ___onFarm;
+            isNamingAnimal = ___namingAnimal;
             animalBeingPurchased = ___animalBeingPurchased;
 
             if (___onFarm && ___namingAnimal)
             {
                 NarrateNamingMenu(__instance, ___textBox, x, y);
             }
-            else if (___onFarm && !___namingAnimal)
+            else if (___onFarm && !___namingAnimal && !Game1.IsFading())
             {
                 firstTimeInNamingMenu = true;
+	        string selectBuildingPrompt = Game1.content.LoadString("Strings\\StringsFromCSFiles:PurchaseAnimalsMenu.cs.11355", animalBeingPurchased.displayHouse, animalBeingPurchased.displayType);
+                MainClass.ScreenReader.SayWithMenuChecker(selectBuildingPrompt, true);
             }
             else if (!___onFarm && !___namingAnimal)
             {
@@ -83,6 +87,7 @@ internal class PurchaseAnimalsMenuPatch : IPatch
         {
             MainClass.ScreenReader.MenuPrefixNoQueryText = Translator.Instance.Translate("menu-purchase_animal-first_time_in_menu_info", TranslationCategory.Menu);
             firstTimeInNamingMenu = false;
+            __instance.textBoxCC?.snapMouseCursorToCenter();
         }
 
         MainClass.ScreenReader.TranslateAndSayWithMenuChecker(translationKey, true, translationTokens);
@@ -103,7 +108,7 @@ internal class PurchaseAnimalsMenuPatch : IPatch
             translationKey = "menu-purchase_animal-animal_info";
             translationTokens = new
             {
-                name = TokenParser.ParseText(farmAnimalData.DisplayName),
+                name = FarmAnimal.GetDisplayName(__instance.hovered.hoverText, forShop: true),
                 price = __instance.hovered.item.salePrice(),
                 description = TokenParser.ParseText(farmAnimalData.ShopDescription)
             };

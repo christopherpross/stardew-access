@@ -12,7 +12,7 @@ using StardewValley.Monsters;
 using StardewValley.Objects;
 using StardewValley.TerrainFeatures;
 using StardewValley.TokenizableStrings;
-using StardewValley.Util;
+using System.ComponentModel;
 
 namespace stardew_access.Utils;
 
@@ -23,6 +23,9 @@ public class TileInfo
     private static readonly Dictionary<string, (string category, string itemName)> QualifiedItemIds = [];
     private static readonly Dictionary<string, Dictionary<(int, int), string>> BundleLocations = [];
     private static HashSet<Vector2> _visitedCollisionTiles = new HashSet<Vector2>();
+
+    private static HashSet<string> _farmAnimalDroppedProduces =
+        ["430", "174", "176", "180", "182", "289", "305", "442", "928", "107", "444", "446"];
 
     private static readonly Dictionary<Color, int> colorToSelectionMap = new()
     {
@@ -328,10 +331,10 @@ public class TileInfo
             return (characterName, characterCategory);
         }
 
-        string? farmAnimal = GetFarmAnimalAt(currentLocation, x, y);
-        if (farmAnimal is not null)
+        var farmAnimal = GetFarmAnimalAt(currentLocation, x, y);
+        if (farmAnimal.name is not null)
         {
-            return (farmAnimal, CATEGORY.Animals);
+            return (farmAnimal.name, farmAnimal.category);
         }
 
         string? door = GetDoorAtTile(currentLocation, x, y);
@@ -353,7 +356,7 @@ public class TileInfo
         (string? name, CATEGORY? category) dynamicTile = DynamicTiles.GetDynamicTileAt(currentLocation, x, y, lessInfo);
         if (dynamicTile.name != null)
         {
-            return (dynamicTile.name, dynamicTile.category);
+            return (Translator.Instance.Translate(dynamicTile.name, TranslationCategory.DynamicTiles), dynamicTile.category);
         }
 
         if (currentLocation.isObjectAtTile(x, y))
@@ -564,27 +567,40 @@ public class TileInfo
     /// <param name="x">The x-coordinate of the tile to check.</param>
     /// <param name="y">The y-coordinate of the tile to check.</param>
     /// <returns>
-    /// A string containing the farm animal's name, type, and age if a farm animal is found at the specified tile;
+    /// A tuple containing the farm animal's name (with type, age, and hungry, pettable and harvestable states), if a farm animal is found at the specified tile
+    /// and the animal's category ("Pending" if the animal is pettable or has a produce i.e., harvestable otherwise "Animals");
     /// null if no farm animal is found or if the location is not a Farm or an AnimalHouse.
     /// </returns>
-    public static string? GetFarmAnimalAt(GameLocation location, int x, int y)
+    public static (string? name, CATEGORY? category) GetFarmAnimalAt(GameLocation location, int x, int y)
     {
         Dictionary<(int x, int y), FarmAnimal>? animalsByCoordinate = AnimalUtils.GetAnimalsByLocation(location);
 
         if (animalsByCoordinate == null || !animalsByCoordinate.TryGetValue((x, y), out FarmAnimal? foundAnimal))
-            return null;
+            return (null, null);
 
         string name = foundAnimal.displayName;
-        int age = (foundAnimal.GetDaysOwned() + 1) / 28 + 1;
         string type = foundAnimal.displayType;
+        bool isHungry = foundAnimal.moodMessage.Value is FarmAnimal.hungry;
+        int age = (foundAnimal.GetDaysOwned() + 1) / 28 + 1;
+        bool isAgeInDays = age <= 1;
+        age = age <= 1 ? foundAnimal.GetDaysOwned() + 1 : age;
 
-        object? translationCategory = new
+        object? token = new
         {
             name,
             type,
-            age
+            is_hungry = isHungry ? 1 : 0,
+            is_baby = foundAnimal.isBaby() ? 1 : 0,
+            is_age_in_days = isAgeInDays ? 1 : 0,
+            can_be_pet = !foundAnimal.wasPet.Value ? 1 : 0,
+            has_produce = foundAnimal.currentProduce.Value != null ? 1 : 0,
+            age,
         };
-        return Translator.Instance.Translate("npc-farm_animal_info", translationCategory);
+        
+        return (Translator.Instance.Translate("npc-farm_animal_info", token),
+            !foundAnimal.wasPet.Value || foundAnimal.currentProduce.Value != null
+                ? CATEGORY.Pending
+                : CATEGORY.Animals);
     }
 
     /// <summary>
@@ -654,8 +670,14 @@ public class TileInfo
 
         // Get object names and categories based on qualified item id
         (string? name, CATEGORY category) correctNameAndCategory = GetCorrectNameAndCategoryFromQualifiedItemId(qualifiedItemId);
-        if (correctNameAndCategory.name == "")
+        #if DEBUG
+            Log.Verbose($" GetObjectNameAndCategory initial {qualifiedItemId} {correctNameAndCategory} {toReturn}", true);
+        #endif
+        if (String.IsNullOrEmpty(correctNameAndCategory.name))
+        {
             correctNameAndCategory.name = obj.DisplayName;
+            toReturn.category = correctNameAndCategory.category; 
+        }
 
         // Check the object type and assign the appropriate name and category
         if (obj is Chest chest)
@@ -702,10 +724,30 @@ public class TileInfo
         }
         else if (obj is IndoorPot indoorPot)
         {
-            string? potContent = indoorPot.bush.Value != null
-                ? TerrainUtils.GetBushInfoString(indoorPot.bush.Value)
-                : TerrainUtils.GetDirtInfoString(indoorPot.hoeDirt.Value, true);
+            string? potContent;
+            CATEGORY potCategory = CATEGORY.Pending;
+            if (indoorPot.bush.Value != null)
+            {
+                // this branch is followed only when a tea bush has been planted in a pot.
+                potContent = TerrainUtils.GetBushInfoString(indoorPot.bush.Value);
+                potCategory = TerrainUtils.GetBushInfo(indoorPot.bush.Value).IsHarvestable
+                    ? CATEGORY.Ready
+                    : CATEGORY.Bushes;
+            }
+            else
+            {
+                potContent = TerrainUtils.GetDirtInfoString(indoorPot.hoeDirt.Value, true);
+                if (TerrainUtils.GetDirtInfo(indoorPot.hoeDirt.Value).IsReadyForHarvest)
+                {
+                    potCategory = CATEGORY.Ready;
+                }
+                else if (TerrainUtils.GetDirtInfo(indoorPot.hoeDirt.Value).IsWatered && TerrainUtils.GetDirtInfo(indoorPot.hoeDirt.Value).CropType != null)
+                {
+                    potCategory = CATEGORY.Crops;
+                }
+            }
             toReturn.name = $"{obj.DisplayName}, {potContent}";
+            toReturn.category = potCategory;
         }
         else if (obj is Sign sign && sign.displayItem.Value != null)
         {
@@ -713,7 +755,16 @@ public class TileInfo
         }
         else if (obj is Furniture furniture)
         {
-            toReturn.category = CATEGORY.Furniture;
+            // if furniture ID is not present in QualifiedItemIds.json, perform container check to set category, otherwise do nothing
+            if (!QualifiedItemIds.TryGetValue(qualifiedItemId, out var info)) toReturn.category = furniture is StorageFurniture ? CATEGORY.Containers: CATEGORY.Furniture;
+        }
+        else if (obj is Workbench)
+        {
+            toReturn.category = CATEGORY.Interactables;
+        }
+        else if (obj.QualifiedItemId == "(BC)99") // Default Feed Hopper
+        {
+            toReturn.category = CATEGORY.Interactables;
         }
         else if (obj is Torch torch)
         {
@@ -746,25 +797,17 @@ public class TileInfo
                 }
             }
         }
-        else if ((obj.Type == "Crafting" && obj.bigCraftable.Value) || obj.Name.Equals("crab pot", StringComparison.OrdinalIgnoreCase))
+        else if ((obj.Type == "Crafting" && obj.bigCraftable.Value) ||
+                 obj.QualifiedItemId == "(O)710") // (O)710 == crab pot
         {
-            // TODO optimize this
-            foreach (string machine in trackable_machines)
+            foreach (var machineIds in trackable_machines)
             {
-                if (obj.Name.Contains(machine, StringComparison.OrdinalIgnoreCase))
-                {
-                    MachineState machineState = GetMachineState(obj);
-                    if (obj.heldObject.Value is not null)
-                    {
-                        toReturn.name = $"{obj.DisplayName}, {InventoryUtils.GetItemDetails(obj.heldObject.Value)}";
-                        toReturn.category = (machineState == MachineState.Busy) ? CATEGORY.Machines : CATEGORY.Ready;
-                    }
-                    else
-                    {
-                        toReturn.name = obj.DisplayName;
-                        toReturn.category = CATEGORY.Machines;
-                    }
-                }
+                if (!obj.QualifiedItemId.Equals(machineIds)) continue;
+
+                toReturn.name = obj.heldObject.Value is not null
+                    ? $"{obj.DisplayName}, {InventoryUtils.GetItemDetails(obj.heldObject.Value)}"
+                    : obj.DisplayName;
+                toReturn.category = GetMachineState(obj) == MachineState.Ready ? CATEGORY.Ready : CATEGORY.Machines;
             }
         }
         else if (obj is Fence fence && fence.isGate.Value)
@@ -778,21 +821,17 @@ public class TileInfo
             });
             toReturn.category = CATEGORY.Doors;
         }
-        else if (correctNameAndCategory.name != null && !obj.ItemId.Contains("GreenRainWeeds"))
+        else if (correctNameAndCategory.name != null)
         {
-            correctNameAndCategory.name = MainClass.Config.ReadTileDebug ? $"{correctNameAndCategory.name} (DisplayName: {obj.DisplayName})" : correctNameAndCategory.name;
+            correctNameAndCategory.name = MainClass.Config.ReadTileDebug
+                ? $"{correctNameAndCategory.name} (DisplayName: {obj.DisplayName})"
+                : correctNameAndCategory.name;
             toReturn = correctNameAndCategory;
         }
-        /*else if (obj.name.Equals("stone", StringComparison.OrdinalIgnoreCase))
-            toReturn.category = CATEGORY.Debris;
-        else if (obj.name.Equals("twig", StringComparison.OrdinalIgnoreCase))
-            toReturn.category = CATEGORY.Debris;
-        else if (obj.name.Contains("quartz", StringComparison.OrdinalIgnoreCase))
-            toReturn.category = CATEGORY.MineItems;
-        else if (obj.name.Contains("earth crystal", StringComparison.OrdinalIgnoreCase))
-            toReturn.category = CATEGORY.MineItems;
-        else if (obj.name.Contains("frozen tear", StringComparison.OrdinalIgnoreCase))
-            toReturn.category = CATEGORY.MineItems;*/
+        else if (_farmAnimalDroppedProduces.Contains(obj.QualifiedItemId))
+        {
+            toReturn.category = CATEGORY.Ready;
+        }
 
         if (toReturn.category == CATEGORY.Machines || toReturn.category == CATEGORY.Ready || toReturn.category == CATEGORY.Pending) // Fix for `Harvestable table` and `Busy nodes`
         {
@@ -806,8 +845,12 @@ public class TileInfo
         if (MainClass.Config.ReadTileDebug && !string.IsNullOrEmpty(toReturn.name))
         {
             if (!string.IsNullOrEmpty(obj.QualifiedItemId))
+            {
                 toReturn.name = $"{toReturn.name} ({obj.QualifiedItemId})";
-            Farmer farmerOwner = Game1.getFarmerMaybeOffline(obj.owner.Value);
+            }
+
+            // TODO Internationalize this...
+            Farmer? farmerOwner = Game1.GetPlayer(obj.owner.Value);
             string ownerName;
             if (farmerOwner == null)
                 ownerName = "";
@@ -834,6 +877,9 @@ public class TileInfo
         {
             object token;
             string qualified_item_id = NormalizeQualifiedItemID(qualifiedItemId);
+            #if DEBUG
+                Log.Verbose($"Fast lookup. ID: {qualified_item_id} {info}", true);
+            #endif
             if (DescriptiveFluentTokens.Contains(info.itemName))
                 token = new { qualified_item_id, described = MainClass.Config.DisableDescriptiveDebris ? 0 : 1 };
             else

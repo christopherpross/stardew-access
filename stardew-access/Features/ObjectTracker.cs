@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Locations;
 
 namespace stardew_access.Features;
 using System.Timers;
@@ -40,7 +41,7 @@ internal class ObjectTracker : FeatureBase
     }
     bool SaveCoordinatesToggle = false;
 
-    private readonly int[] objectCounts = [0, 0, 0, 0, 0, 0];
+    private readonly int[] objectCounts = [0, 0, 0, 0, 0, 0, 0];
     private readonly List<Action> updateActions;
     private int currentActionIndex = 0;
     private bool countHasChanged = false;
@@ -70,6 +71,7 @@ internal class ObjectTracker : FeatureBase
             () => UpdateAndRunIfChanged(ref objectCounts[3], Game1.currentLocation.resourceClumps.Count, () => { Log.Debug("ResourceClumps count has changed."); countHasChanged = true; }),
             () => UpdateAndRunIfChanged(ref objectCounts[4], Game1.currentLocation.terrainFeatures.Count(), () => { Log.Debug("TerrainFeatures count has changed."); countHasChanged = true; }),
             () => UpdateAndRunIfChanged(ref objectCounts[5], Game1.currentLocation.largeTerrainFeatures.Count, () => { Log.Debug("LargeTerrainFeatures count has changed."); countHasChanged = true; }),
+            () => UpdateSpecialAction()
         ];
         LoadFavorites();
     }
@@ -88,6 +90,11 @@ internal class ObjectTracker : FeatureBase
 
     public override void Update(object? sender, UpdateTickedEventArgs e)
     {
+        // The event with id 13 is the Haley's six heart event, the one at the beach requiring the player to find the bracelet
+        // *** Exiting here will cause GridMovement and ObjectTracker functionality to not work during this event, making the bracelet impossible to track ***
+        if (!Context.IsPlayerFree && !(Game1.CurrentEvent is not null && Game1.CurrentEvent.id == "13"))
+            return; // so ... why are we exiting here? _^_
+
         if (Game1.activeClickableMenu != null && pathfinder != null && pathfinder.IsActive)
         {
             #if DEBUG
@@ -98,9 +105,8 @@ internal class ObjectTracker : FeatureBase
             return;
         }
 
-        if (!e.IsMultipleOf(15) || !MainClass.Config.OTAutoRefreshing) return;
-
-        Tick();
+        if (e.IsMultipleOf(5))
+            Tick();
     }
 
     public override bool OnButtonPressed(object? sender, ButtonPressedEventArgs e)
@@ -170,9 +176,34 @@ internal class ObjectTracker : FeatureBase
         FavoriteStack = 0;
     }
 
+    private void UpdateSpecialAction()
+    {
+        // Early exit if no location
+        if (Game1.currentLocation == null) return;
+        // Handle any special event refresh logic here
+        if (Game1.currentLocation!.currentEvent != null)
+        {
+            switch(Game1.currentLocation!.currentEvent!.id)
+            {
+                case "festival_spring13":
+                    UpdateAndRunIfChanged(ref objectCounts[6], Game1.currentLocation.currentEvent.festivalProps.Count, () => { Log.Debug("Eggs count has changed."); countHasChanged = true; });
+                    return;
+            }
+        }
+        else
+        {
+            switch (Game1.currentLocation)
+            {
+                case  IslandHut islandHut:
+                    UpdateAndRunIfChanged(ref objectCounts[6], islandHut.treeHitLocal ? 1 : 0, () => { Log.Debug("Potted tree state has changed."); countHasChanged = true; });
+                    return;
+            }
+        }
+    }
+
     public void Tick()
     {
-        if (MainClass.Config.OTAutoRefreshing || Game1.currentLocation == null) return;
+        if (!MainClass.Config.OTAutoRefreshing || Game1.currentLocation == null) return;
 
         if (updateActions.Count == 0)
         {
@@ -190,7 +221,7 @@ internal class ObjectTracker : FeatureBase
             if (countHasChanged)
             {
                 Log.Debug("Refreshing ObjectTracker; changes detected.");
-                GetLocationObjects(resetFocus: false);
+                GetLocationObjects(resetFocus: SortByProximity);
                 countHasChanged = false;  // Reset the flag for the next cycle
             }
 
@@ -235,6 +266,7 @@ internal class ObjectTracker : FeatureBase
         FixCharacterMovement();
         if (lastTargetedTile != null) FacePlayerToTargetTile(lastTargetedTile.Value);
         ReadCurrentlySelectedObject();
+        GetLocationObjects(resetFocus: SortByProximity);
         pathfinder?.Dispose();
     }
 
@@ -409,7 +441,7 @@ internal class ObjectTracker : FeatureBase
         else
         {
             string[] objectKeys = SelectedCategory != null && objects?.ContainsKey(SelectedCategory) == true
-                ? objects[SelectedCategory].Keys.ToArray()
+                ? [.. objects[SelectedCategory].Keys]
                 : [];
             CycleHelper(ref SelectedObject, objectKeys);
         }
@@ -538,7 +570,7 @@ internal class ObjectTracker : FeatureBase
 
     public void SaveToFavorites(int hotkey)
     {
-        string location = Game1.currentLocation.NameOrUniqueName;
+        string location = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName;
         string currentSaveFileName = MainClass.GetCurrentSaveFileName();
         if (!favorites.ContainsKey(currentSaveFileName))
         {
@@ -560,7 +592,7 @@ internal class ObjectTracker : FeatureBase
 
     public (string?, string?) GetFromFavorites(int hotkey)
     {
-        string location = Game1.currentLocation.NameOrUniqueName;
+        string location = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName;
         if (!favorites.TryGetValue(MainClass.GetCurrentSaveFileName(), out var _saveFileFavorites) || _saveFileFavorites != null)
         {
             LoadDefaultFavorites();
@@ -590,7 +622,7 @@ internal class ObjectTracker : FeatureBase
 
     public void DeleteFavorite(int favoriteNumber)
     {
-        string currentLocation = Game1.currentLocation.NameOrUniqueName;
+        string currentLocation = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName;
 
         // Try to get the sub-dictionary for the current location
         if (favorites.TryGetValue(MainClass.GetCurrentSaveFileName(), out var saveFileFavorites) && saveFileFavorites != null)
@@ -722,7 +754,7 @@ internal class ObjectTracker : FeatureBase
                                 new
                                 {
                                     coordinates = Vector2ToString(CurrentPlayer.FacingTile),
-                                    location_name = Game1.currentLocation!.NameOrUniqueName,
+                                    location_name = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName,
                                     favorite_number
                                 }
                             );
@@ -732,7 +764,7 @@ internal class ObjectTracker : FeatureBase
                                 {
                                     selected_object = SelectedObject,
                                     selected_category = SelectedCategory,
-                                    location_name = Game1.currentLocation!.NameOrUniqueName,
+                                    location_name = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName,
                                     favorite_number
                                 }
                             );
@@ -752,7 +784,7 @@ internal class ObjectTracker : FeatureBase
                 MainClass.ScreenReader.TranslateAndSay("feature-object_tracker-favorite_cleared", true,
                     new
                     {
-                        location_name = Game1.currentLocation!.NameOrUniqueName,
+                        location_name = Game1.currentLocation.currentEvent is not null ? Game1.currentLocation.currentEvent.FestivalName : Game1.currentLocation.NameOrUniqueName,
                         favorite_number
                     }
                 );
@@ -786,7 +818,7 @@ internal class ObjectTracker : FeatureBase
                     }
                     else
                     {
-                        favorites = new Dictionary<string, Dictionary<string, Dictionary<int, (string?, string?)>>>();
+                        favorites = [];
                     }
                 }
 
@@ -803,7 +835,7 @@ internal class ObjectTracker : FeatureBase
         catch (Exception ex)
         {
             Log.Warn(ex.Message);
-            favorites = new Dictionary<string, Dictionary<string, Dictionary<int, (string?, string?)>>>();
+            favorites = [];
         }
     }
 

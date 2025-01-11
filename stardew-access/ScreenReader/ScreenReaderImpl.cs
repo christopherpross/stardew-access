@@ -4,6 +4,7 @@ using stardew_access.Utils;
 
 namespace stardew_access.ScreenReader;
 
+// TODO Declutter this class
 public class ScreenReaderImpl : IScreenReader
 {
     public string prevText = "", prevTextTile = "", prevChatText = "", prevMenuText = "";
@@ -83,7 +84,7 @@ public class ScreenReaderImpl : IScreenReader
 
         if (!excludeFromBuffer) SpokenBuffer.Add(text);
 
-        if (!CrossSpeakManager.Instance.Speak(text, interrupt))
+        if (!CrossSpeakManager.Instance.Output(text, interrupt))
         {
             Log.Error($"Failed to output text: {text}");
             return false;
